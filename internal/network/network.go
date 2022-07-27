@@ -11,18 +11,21 @@ func New(sizes []int) *Network {
 		layersCount: len(sizes),
 		sizes:       sizes,
 		layers: func() []Layer {
-			res := make([]Layer, len(sizes))
-			for i, size := range sizes {
-				res[i] = make(Layer, size)
+			res := make([]Layer, len(sizes)-1)
+
+			// First layer is the input layer, so we actually don't create one
+			for i := 1; i < len(sizes); i++ {
+				res[i-1] = make(Layer, sizes[i])
 
 				// Create the biases randomly
-				biases := vector.CreateNormalRandom(size)
+				biases := vector.CreateNormalRandom(sizes[i-1])
 
 				// Create the weights randomly
-				for j := 0; j < size; j++ {
-					res[i][j] = NewSigmoidNeuron(biases[j], vector.CreateNormalRandom(size))
+				for j := 0; j < sizes[i]; j++ {
+					res[i-1][j] = NewSigmoidNeuron(biases[j], vector.CreateNormalRandom(sizes[i-1]))
 				}
 			}
+
 			return res
 		}(),
 	}
@@ -53,7 +56,7 @@ func (n *Network) FeedForward(input vector.Vector) vector.Vector {
 
 // StochasticGradientDescent for training the network
 func (n *Network) StochasticGradientDescent(trainingData []*Input, epochs int, batchSize int, learningRate float64, testData []*Input) {
-	fmt.Printf("Training...")
+	fmt.Printf("Training... \n")
 	for k := 0; k < epochs; k++ {
 		/*
 			The idea is that for every epoch we run, we shuffle the data and create the batches for
@@ -132,7 +135,7 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, epochs int, b
 				*/
 
 				// From the last layer to the first one
-				for i := n.layersCount - 1; i > 0; i-- {
+				for i := n.layersCount - 1; i >= 0; i-- {
 					for j := range n.layers[i] {
 						z := zs[i][j]
 						wij := n.layers[i][j].Weights()[j]
@@ -140,14 +143,14 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, epochs int, b
 						// We already computed sigmoid(z) and we saved it in the activations slice
 						// So now we compute the deltas
 						ps := sigmoidPrime(z)
-						delta := -(expected[i] - activations[i][j]) * ps
+						delta := (expected[i] - activations[i][j]) * ps
 						deltaNablaB[i][j] = delta
 						deltaNablaW[i][j] = delta * wij
 					}
 				}
 
 				// We change the previous values we stored in the nabla arrays
-				for i := 0; i < len(deltaNablaB); i++ {
+				for i := 0; i < len(n.layers); i++ {
 					nablaB[i] = vector.Add(nablaB[i], deltaNablaB[i])
 					nablaW[i] = vector.Add(nablaW[i], deltaNablaW[i])
 				}
@@ -155,12 +158,14 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, epochs int, b
 
 			// We update the weights
 			for i := 0; i < n.layersCount; i++ {
-				for j := 0; j < len(nablaB); j++ {
+				for j := 0; j < len(nablaB[i]); j++ {
 					bij := n.layers[i][j].Bias()
-					n.layers[i][j].SetBias(bij - (learningRate/M)*nablaB[i][j])
+					d := (learningRate / M) * nablaB[i][j]
+					n.layers[i][j].SetBias(bij - d)
 
 					for _, wij := range n.layers[i][j].Weights() {
-						n.layers[i][j].SetWeight(j, wij-(learningRate/M)*nablaW[i][j])
+						d := (learningRate / M) * nablaW[i][j]
+						n.layers[i][j].SetWeight(j, wij-d)
 					}
 				}
 			}
@@ -174,6 +179,6 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, epochs int, b
 			}
 		}
 
-		fmt.Printf("After %v epochs: %v / %v answers are correct", k+1, correct, len(testData))
+		fmt.Printf("After %v epochs: %v / %v answers are correct \n", k+1, correct, len(testData))
 	}
 }

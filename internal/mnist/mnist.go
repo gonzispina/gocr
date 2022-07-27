@@ -132,7 +132,7 @@ func dataset2NetInput(d *DataSet) []*network.Input {
 		input := vector.CreateZeroVector(d.W * d.H)
 		for j := 0; j < d.W; j++ {
 			for k := 0; k < d.H; k++ {
-				input[j*d.W+k] = float64(testCase.Image[j][k])
+				input[j*d.W+k] = float64(testCase.Image[j][k]) / 255
 			}
 		}
 
