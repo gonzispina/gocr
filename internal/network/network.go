@@ -1,31 +1,22 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gonzispina/gocr/kit/vector"
 )
 
-// New constructor
-func New(sizes []int) *Network {
+// NewRandom constructor
+func NewRandom(sizes []int) *Network {
 	return &Network{
-		layersCount: len(sizes),
-		sizes:       sizes,
-		layers: func() []Layer {
-			res := make([]Layer, len(sizes)-1)
-
-			// First layer is the input layer, so we actually don't create one
+		layers: len(sizes) - 1,
+		sizes:  sizes,
+		biases: vector.CreateManyNormalRandom(sizes[1:]),
+		weights: func() [][]vector.Vector {
+			res := make([][]vector.Vector, len(sizes)-1)
 			for i := 1; i < len(sizes); i++ {
-				res[i-1] = make(Layer, sizes[i])
-
-				// Create the biases randomly
-				biases := vector.CreateNormalRandom(sizes[i-1])
-
-				// Create the weights randomly
-				for j := 0; j < sizes[i]; j++ {
-					res[i-1][j] = NewSigmoidNeuron(biases[j], vector.CreateNormalRandom(sizes[i-1]))
-				}
+				res[i-1] = vector.CreateManyFixedSizeNormalRandom(sizes[i], sizes[i-1])
 			}
-
 			return res
 		}(),
 	}
@@ -33,152 +24,125 @@ func New(sizes []int) *Network {
 
 // Network implementation
 type Network struct {
-	layersCount int
-	sizes       []int
-	layers      []Layer
+	layers  int
+	sizes   []int
+	biases  []vector.Vector
+	weights [][]vector.Vector
 }
 
-func (n *Network) FeedForward(input vector.Vector) vector.Vector {
-	for i, layer := range n.layers {
-		z := layer.Activate(input)
-		if i+1 == n.layersCount {
+func (n *Network) FeedForward(input vector.Vector) (vector.Vector, error) {
+	if len(input) != n.sizes[0] {
+		return nil, errors.New(fmt.Sprintf("invalid input size %v, expected %v", len(input), n.sizes[0]))
+	}
+
+	for i := 0; i < n.layers; i++ {
+		// layer
+		a := make(vector.Vector, n.sizes[i+1])
+		for j := 0; j < n.sizes[i+1]; j++ {
+			a[j] = sigmoid(vector.Dot(input, n.weights[i][j]) + n.biases[i][j])
+		}
+
+		if i+1 == n.layers {
 			// We reached the last layer so we return its output
-			return z
+			return a, nil
 		} else {
 			// The output of the last layer becomes the Input of the next one
-			input = z
+			input = a
 		}
 	}
 
 	// Unreachable
-	return nil
+	return nil, nil
 }
 
 // StochasticGradientDescent for training the network
-func (n *Network) StochasticGradientDescent(trainingData []*Input, epochs int, batchSize int, learningRate float64, testData []*Input) {
-	fmt.Printf("Training... \n")
-	for k := 0; k < epochs; k++ {
-		/*
-			The idea is that for every epoch we run, we shuffle the data and create the batches for
-			the stochastic gradient descent. For every batch we process we are going to propagate backwards
-			the delta in the gradient and adjust every weight and bias.
-		*/
+func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int, learningRate float64) {
+	trainingData = shuffleSlice(trainingData)
+	batches := splitIntoBatches(trainingData, batchSize)
 
-		trainingData = shuffleSlice(trainingData)
-		batches := splitIntoBatches(trainingData, batchSize)
+	// Process every batch
+	for _, batch := range batches {
+		// We set M the batch size we are going to use to compute deltas
+		M := float64(len(batch))
+		sdgRatio := -learningRate / M
 
-		// In the following vectors we are going to store the values of the derivatives of the cost
-		// function with respect to the biases and the weights respectively (nabla is the notation used for gradients)
-		nablaB := vector.CreateManyZeroVector(n.sizes)
-		nablaW := vector.CreateManyZeroVector(n.sizes)
-
-		// Process every batch
-		for _, batch := range batches {
-			// We set M the batch size we are going to use to compute deltas
-			M := float64(len(batch))
-			deltaNablaB := vector.CreateManyZeroVector(n.sizes)
-			deltaNablaW := vector.CreateManyZeroVector(n.sizes)
-
-			for _, trainingInput := range batch {
-				input := trainingInput.Input
-				expected := trainingInput.Expected
-
-				/*
-					First we need to obtain the deltas to apply to the weights and the biases:
-					deltaC = nablaW * deltaW + nablaB * deltaB
-						   = (nablaW ; nablaB) . (deltaW ; deltaB)
-
-					Where (nablaW ; nablaB) = nablaC the gradient of our cost function
-					But we want to minimize, so the step we are going to take is in the opposite direction of the gradient of the cost function, so:
-					(deltaW ; deltaB) = mu * -(nablaW ; nablaB)
-
-					We also have:
-					deltaW = (W - W0) where W is the new weight and W0 is the current weight
-					deltaB = (B - WV) where B is the new bias and B0 is the current bias
-
-					Then:
-					(W - W0) = -mu * nablaW <=> W = W0 -mu * nablaW
-					(B - B0) = -mu * nablaB <=> B = B0 -mu * nablaB
-				*/
-
-				// The activations of all the layers
-				var activations []vector.Vector
-				activations = append(activations, input)
-
-				// The values of the layers without computing the activation function
-				zs := make([]vector.Vector, n.layersCount)
-				for i, layer := range n.layers {
-					z := make(vector.Vector, len(layer))
-					activation := make(vector.Vector, len(layer))
-					for j, neuron := range layer {
-						z[j] = vector.Dot(neuron.Weights(), activations[i]) + neuron.Bias()
-						activation[j] = sigmoid(z[j])
-					}
-
-					zs[i] = z
-					activations = append(activations, activation)
-				}
-
-				/*
-					We know nablaW = (C_w11, C_w12, ..., C_w1n, ..., C_wl1, ..., C_wlm) where every C_w is the derivative of the
-					cost function with respect to wji where j is the layer number and i is the index of the neuron in the given layer.
-
-					Every C_wji = - (mu / m) * SUM {(sigmoid(z) - Expected) * sigmoid_prime(z) * wij} FROM 1 to
-					Respectively C_bji = - (mu / m) * SUM {(Expected - sigmoid(z)) * sigmoid_prime(z) * 1} FROM 1 to m
-
-					So the first thing we are going to compute is
-
-					cost = -(Expected - sigmoid(z))
-					sp = sigmoid_prime(z)
-
-					And with that we are going to build our nablaW and nablaB to compute the deltas
-				*/
-
-				// From the last layer to the first one
-				for i := n.layersCount - 1; i >= 0; i-- {
-					for j := range n.layers[i] {
-						z := zs[i][j]
-						wij := n.layers[i][j].Weights()[j]
-
-						// We already computed sigmoid(z) and we saved it in the activations slice
-						// So now we compute the deltas
-						ps := sigmoidPrime(z)
-						delta := (expected[i] - activations[i][j]) * ps
-						deltaNablaB[i][j] = delta
-						deltaNablaW[i][j] = delta * wij
-					}
-				}
-
-				// We change the previous values we stored in the nabla arrays
-				for i := 0; i < len(n.layers); i++ {
-					nablaB[i] = vector.Add(nablaB[i], deltaNablaB[i])
-					nablaW[i] = vector.Add(nablaW[i], deltaNablaW[i])
-				}
-			}
-
-			// We update the weights
-			for i := 0; i < n.layersCount; i++ {
-				for j := 0; j < len(nablaB[i]); j++ {
-					bij := n.layers[i][j].Bias()
-					d := (learningRate / M) * nablaB[i][j]
-					n.layers[i][j].SetBias(bij - d)
-
-					for _, wij := range n.layers[i][j].Weights() {
-						d := (learningRate / M) * nablaW[i][j]
-						n.layers[i][j].SetWeight(j, wij-d)
-					}
-				}
+		biasDeltas := make([]vector.Vector, len(n.sizes)-1)
+		weightDeltas := make([][]vector.Vector, len(n.sizes)-1)
+		for i := 1; i < len(n.sizes); i++ {
+			biasDeltas[i-1] = vector.CreateZero(n.sizes[i])
+			weightDeltas[i-1] = make([]vector.Vector, n.sizes[i])
+			for j := 0; j < n.sizes[i]; j++ {
+				weightDeltas[i-1][j] = vector.CreateZero(n.sizes[i-1])
 			}
 		}
 
-		correct := 0
-		for _, i := range testData {
-			res := n.FeedForward(i.Input)
-			if vector.MaxKey(res) == vector.MaxKey(i.Expected) {
-				correct++
+		for _, trainingInput := range batch {
+			input := trainingInput.Input
+			expected := trainingInput.Expected
+
+			// First we compute the Z values and the activations of every neuron of the network
+
+			// The activation values after computing the activation function of all the layers
+			var activations []vector.Vector
+			activations = append(activations, input)
+
+			// The values of the layers without computing the activation function
+			zs := make([]vector.Vector, n.layers)
+			for i := 0; i < n.layers; i++ {
+				z := make(vector.Vector, n.sizes[i+1])
+				activation := make(vector.Vector, n.sizes[i+1])
+
+				for j := 0; j < n.sizes[i+1]; j++ {
+					z[j] = vector.Dot(activations[i], n.weights[i][j]) + n.biases[i][j]
+					activation[j] = sigmoid(z[j])
+				}
+
+				zs[i] = z
+				activations = append(activations, activation)
+			}
+
+			// last layer index
+			lli := n.layers - 1
+
+			// Now we calculate the cost derivative with respect to every weight and bias in the network and
+			// subtract that from every weight and bias of the network.
+			cost := vector.Substract(expected, activations[n.layers])
+			sp := vector.Apply(zs[lli], sigmoidPrime)
+			deltas := vector.Hadamard(cost, sp)
+
+			biasDeltas[lli] = vector.Add(biasDeltas[lli], deltas)
+			for j := 0; j < n.sizes[n.layers]; j++ {
+				neuronDeltas := vector.Scale(activations[lli], deltas[j])
+				weightDeltas[lli][j] = vector.Add(weightDeltas[lli][j], neuronDeltas)
+			}
+
+			// From the last hidden layer the first hidden one, 'cause the first one is the input one
+			for i := lli - 1; i >= 0; i-- {
+				z := zs[i]
+				sp = vector.Apply(z, sigmoidPrime)
+
+				// We transpose the next layer weights and calculate the new deltas
+				newDeltas := make(vector.Vector, n.sizes[i+1])
+				for j := 0; j < n.sizes[i+1]; j++ {
+					for k := 0; k < n.sizes[i+2]; k++ {
+						newDeltas[j] += deltas[k] * n.weights[i+1][k][j] * sp[j]
+					}
+
+					neuronDeltas := vector.Scale(activations[i], newDeltas[j])
+					weightDeltas[i][j] = vector.Add(weightDeltas[i][j], neuronDeltas)
+				}
+
+				deltas = newDeltas
+				biasDeltas[i] = vector.Add(biasDeltas[i], deltas)
 			}
 		}
 
-		fmt.Printf("After %v epochs: %v / %v answers are correct \n", k+1, correct, len(testData))
+		for i := 0; i < n.layers; i++ {
+			n.biases[i] = vector.Substract(n.biases[i], vector.Scale(biasDeltas[i], sdgRatio))
+
+			for j := 0; j < n.sizes[i+1]; j++ {
+				n.weights[i][j] = vector.Substract(n.weights[i][j], vector.Scale(weightDeltas[i][j], sdgRatio))
+			}
+		}
 	}
 }

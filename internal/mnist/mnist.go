@@ -126,10 +126,10 @@ type DataSet struct {
 func dataset2NetInput(d *DataSet) []*network.Input {
 	res := make([]*network.Input, d.N)
 	for i, testCase := range d.Data {
-		expected := vector.CreateZeroVector(10)
+		expected := vector.CreateZero(10)
 		expected[testCase.Digit] = 1
 
-		input := vector.CreateZeroVector(d.W * d.H)
+		input := vector.CreateZero(d.W * d.H)
 		for j := 0; j < d.W; j++ {
 			for k := 0; k < d.H; k++ {
 				input[j*d.W+k] = float64(testCase.Image[j][k]) / 255

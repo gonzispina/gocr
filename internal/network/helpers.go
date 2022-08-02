@@ -50,3 +50,16 @@ func shuffleSlice[T any](slice []T) []T {
 	}
 	return slice
 }
+
+func initializeZeroWeightsAndBiases(sizes []int) ([]vector.Vector, [][]vector.Vector) {
+	biases := make([]vector.Vector, len(sizes)-1)
+	weights := make([][]vector.Vector, len(sizes)-1)
+	for i := 1; i < len(sizes); i++ {
+		biases[i-1] = vector.CreateZero(sizes[i])
+		weights[i-1] = make([]vector.Vector, sizes[i])
+		for j := 0; j < sizes[i]; j++ {
+			weights[i-1][j] = vector.CreateZero(sizes[i-1])
+		}
+	}
+	return biases, weights
+}

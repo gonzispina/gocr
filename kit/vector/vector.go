@@ -2,8 +2,14 @@ package vector
 
 import (
 	"github.com/cpmech/gosl/la"
+	"math"
 	"math/rand"
+	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // Vector shadowing, this way it is easier to change the lib in the future if necessary
 type Vector = la.Vector
@@ -26,6 +32,30 @@ func Dot(u Vector, v Vector) float64 {
 	return la.VecDot(u, v)
 }
 
+// Hadamard product
+func Hadamard(u Vector, v Vector) Vector {
+	res := la.NewVector(len(u))
+	for i := 0; i < len(u); i++ {
+		res[i] = u[i] * v[i]
+	}
+	return res
+}
+
+// Scale by a value
+func Scale(u Vector, scalar float64) Vector {
+	for i := range u {
+		u[i] = u[i] * scalar
+	}
+	return u
+}
+
+func Apply(v Vector, f func(f float64) float64) Vector {
+	for i, u := range v {
+		v[i] = f(u)
+	}
+	return v
+}
+
 // Add returns the difference between two vectors
 func Add(u Vector, v Vector) Vector {
 	res := la.NewVector(len(u))
@@ -40,16 +70,16 @@ func Substract(u Vector, v Vector) Vector {
 	return res
 }
 
-func CreateZeroVector(size int) Vector {
+func CreateZero(size int) Vector {
 	v := la.NewVector(size)
 	v.Fill(0)
 	return v
 }
 
-func CreateManyZeroVector(sizes []int) []Vector {
+func CreateManyZero(sizes []int) []Vector {
 	res := make([]Vector, len(sizes))
 	for i, s := range sizes {
-		res[i] = CreateZeroVector(s)
+		res[i] = CreateZero(s)
 	}
 	return res
 }
@@ -58,7 +88,7 @@ func CreateManyZeroVector(sizes []int) []Vector {
 func CreateNormalRandom(size int) Vector {
 	vec := la.NewVector(size)
 	for i := 0; i < size; i++ {
-		vec[i] = rand.NormFloat64()
+		vec[i] = rand.NormFloat64() / math.Sqrt(float64(size))
 	}
 	return vec
 }
@@ -66,8 +96,17 @@ func CreateNormalRandom(size int) Vector {
 // CreateManyNormalRandom vectors
 func CreateManyNormalRandom(sizes []int) []Vector {
 	vecs := make([]Vector, len(sizes))
-	for i := 0; i < len(sizes)-1; i++ {
+	for i := 0; i < len(sizes); i++ {
 		vecs[i] = CreateNormalRandom(sizes[i])
+	}
+	return vecs
+}
+
+// CreateManyFixedSizeNormalRandom vectors
+func CreateManyFixedSizeNormalRandom(amount, size int) []Vector {
+	vecs := make([]Vector, amount)
+	for i := 0; i < amount; i++ {
+		vecs[i] = CreateNormalRandom(size)
 	}
 	return vecs
 }
