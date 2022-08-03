@@ -11,11 +11,11 @@ func NewRandom(sizes []int) *Network {
 	return &Network{
 		layers: len(sizes) - 1,
 		sizes:  sizes,
-		biases: vector.CreateManyNormalRandom(sizes[1:]),
+		biases: vector.CreateManyNormalRandom(sizes[1:], sizes[0:len(sizes)-1]),
 		weights: func() [][]vector.Vector {
 			res := make([][]vector.Vector, len(sizes)-1)
 			for i := 1; i < len(sizes); i++ {
-				res[i-1] = vector.CreateManyFixedSizeNormalRandom(sizes[i], sizes[i-1])
+				res[i-1] = vector.CreateManyFixedSizeNormalRandom(sizes[i], sizes[i-1], sizes[i-1])
 			}
 			return res
 		}(),
@@ -35,24 +35,15 @@ func (n *Network) FeedForward(input vector.Vector) (vector.Vector, error) {
 		return nil, errors.New(fmt.Sprintf("invalid input size %v, expected %v", len(input), n.sizes[0]))
 	}
 
-	for i := 0; i < n.layers; i++ {
-		// layer
-		a := make(vector.Vector, n.sizes[i+1])
-		for j := 0; j < n.sizes[i+1]; j++ {
-			a[j] = sigmoid(vector.Dot(input, n.weights[i][j]) + n.biases[i][j])
+	for i := 1; i <= n.layers; i++ {
+		activation := make(vector.Vector, n.sizes[i])
+		for j := 0; j < n.sizes[i]; j++ {
+			activation[j] = sigmoid(vector.Dot(input, n.weights[i-1][j]) + n.biases[i-1][j])
 		}
-
-		if i+1 == n.layers {
-			// We reached the last layer so we return its output
-			return a, nil
-		} else {
-			// The output of the last layer becomes the Input of the next one
-			input = a
-		}
+		input = activation
 	}
 
-	// Unreachable
-	return nil, nil
+	return input, nil
 }
 
 // StochasticGradientDescent for training the network
@@ -64,21 +55,14 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int
 	for _, batch := range batches {
 		// We set M the batch size we are going to use to compute deltas
 		M := float64(len(batch))
-		sdgRatio := -learningRate / M
+		sdgRatio := learningRate / M
 
-		biasDeltas := make([]vector.Vector, len(n.sizes)-1)
-		weightDeltas := make([][]vector.Vector, len(n.sizes)-1)
-		for i := 1; i < len(n.sizes); i++ {
-			biasDeltas[i-1] = vector.CreateZero(n.sizes[i])
-			weightDeltas[i-1] = make([]vector.Vector, n.sizes[i])
-			for j := 0; j < n.sizes[i]; j++ {
-				weightDeltas[i-1][j] = vector.CreateZero(n.sizes[i-1])
-			}
-		}
+		nablaB, nablaW := initializeZeroWeightsAndBiases(n.sizes)
 
 		for _, trainingInput := range batch {
 			input := trainingInput.Input
 			expected := trainingInput.Expected
+			biasDeltas, weightDeltas := initializeZeroWeightsAndBiases(n.sizes)
 
 			// First we compute the Z values and the activations of every neuron of the network
 
@@ -106,7 +90,7 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int
 
 			// Now we calculate the cost derivative with respect to every weight and bias in the network and
 			// subtract that from every weight and bias of the network.
-			cost := vector.Substract(expected, activations[n.layers])
+			cost := vector.Substract(activations[n.layers], expected)
 			sp := vector.Apply(zs[lli], sigmoidPrime)
 			deltas := vector.Hadamard(cost, sp)
 
@@ -127,21 +111,29 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int
 					for k := 0; k < n.sizes[i+2]; k++ {
 						newDeltas[j] += deltas[k] * n.weights[i+1][k][j] * sp[j]
 					}
-
-					neuronDeltas := vector.Scale(activations[i], newDeltas[j])
-					weightDeltas[i][j] = vector.Add(weightDeltas[i][j], neuronDeltas)
 				}
 
 				deltas = newDeltas
 				biasDeltas[i] = vector.Add(biasDeltas[i], deltas)
+				for j := 0; j < n.sizes[i+1]; j++ {
+					neuronDeltas := vector.Scale(activations[i], newDeltas[j])
+					weightDeltas[i][j] = vector.Add(weightDeltas[i][j], neuronDeltas)
+				}
+			}
+
+			for i := 0; i < n.layers; i++ {
+				nablaB[i] = vector.Add(nablaB[i], biasDeltas[i])
+				for j := 0; j < n.sizes[i+1]; j++ {
+					nablaW[i][j] = vector.Add(nablaW[i][j], weightDeltas[i][j])
+				}
 			}
 		}
 
 		for i := 0; i < n.layers; i++ {
-			n.biases[i] = vector.Substract(n.biases[i], vector.Scale(biasDeltas[i], sdgRatio))
+			n.biases[i] = vector.Substract(n.biases[i], vector.Scale(nablaB[i], sdgRatio))
 
 			for j := 0; j < n.sizes[i+1]; j++ {
-				n.weights[i][j] = vector.Substract(n.weights[i][j], vector.Scale(weightDeltas[i][j], sdgRatio))
+				n.weights[i][j] = vector.Substract(n.weights[i][j], vector.Scale(nablaW[i][j], sdgRatio))
 			}
 		}
 	}

@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 // Vector shadowing, this way it is easier to change the lib in the future if necessary
 type Vector = la.Vector
 
@@ -43,17 +39,19 @@ func Hadamard(u Vector, v Vector) Vector {
 
 // Scale by a value
 func Scale(u Vector, scalar float64) Vector {
+	res := make(Vector, len(u))
 	for i := range u {
-		u[i] = u[i] * scalar
+		res[i] = u[i] * scalar
 	}
-	return u
+	return res
 }
 
 func Apply(v Vector, f func(f float64) float64) Vector {
+	res := make(Vector, len(v))
 	for i, u := range v {
-		v[i] = f(u)
+		res[i] = f(u)
 	}
-	return v
+	return res
 }
 
 // Add returns the difference between two vectors
@@ -85,28 +83,29 @@ func CreateManyZero(sizes []int) []Vector {
 }
 
 // CreateNormalRandom vector
-func CreateNormalRandom(size int) Vector {
+func CreateNormalRandom(size, normParameter int) Vector {
+	rand.Seed(time.Now().UnixNano())
 	vec := la.NewVector(size)
 	for i := 0; i < size; i++ {
-		vec[i] = rand.NormFloat64() / math.Sqrt(float64(size))
+		vec[i] = rand.NormFloat64() / math.Sqrt(float64(normParameter))
 	}
 	return vec
 }
 
 // CreateManyNormalRandom vectors
-func CreateManyNormalRandom(sizes []int) []Vector {
+func CreateManyNormalRandom(sizes, normParameters []int) []Vector {
 	vecs := make([]Vector, len(sizes))
 	for i := 0; i < len(sizes); i++ {
-		vecs[i] = CreateNormalRandom(sizes[i])
+		vecs[i] = CreateNormalRandom(sizes[i], normParameters[i])
 	}
 	return vecs
 }
 
 // CreateManyFixedSizeNormalRandom vectors
-func CreateManyFixedSizeNormalRandom(amount, size int) []Vector {
+func CreateManyFixedSizeNormalRandom(amount, size, normParameter int) []Vector {
 	vecs := make([]Vector, amount)
 	for i := 0; i < amount; i++ {
-		vecs[i] = CreateNormalRandom(size)
+		vecs[i] = CreateNormalRandom(size, normParameter)
 	}
 	return vecs
 }
