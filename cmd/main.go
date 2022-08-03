@@ -18,21 +18,7 @@ func main() {
 		panic(err)
 	}
 
-	net := network.NewRandom([]int{784, 30, 30, 10})
-
-	/*
-		trainingData := data[:1000]
-		value, _ := net.FeedForward(trainingData[0].Input)
-		fmt.Printf("%v Res: %v \n", value, vector.MaxKey(value))
-
-		for i := 0; i < 100; i++ {
-			net.StochasticGradientDescent(trainingData, 10, 3.0)
-			value, _ = net.FeedForward(trainingData[0].Input)
-
-			fmt.Printf("%v Res: %v \n", value, vector.MaxKey(value))
-		}
-		fmt.Printf("Expected: %v \n", vector.MaxKey(trainingData[0].Expected))
-	*/
+	net := network.NewRandom([]int{784, 30, 10})
 
 	// Train the net
 	epochs := 30
@@ -45,7 +31,7 @@ func main() {
 		// the stochastic gradient descent. For every batch we process we are going to propagate backwards
 		// the delta in the gradient and adjust every weight and bias.
 
-		net.StochasticGradientDescent(trainingData, 10, 3.0)
+		net.StochasticGradientDescent(trainingData, 10, 2.999)
 		correct := 0
 		for _, i := range testData {
 			res, _ := net.FeedForward(i.Input)
