@@ -57,15 +57,12 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int
 		M := float64(len(batch))
 		sdgRatio := learningRate / M
 
-		nablaB, nablaW := initializeZeroWeightsAndBiases(n.sizes)
-
+		biasDeltas, weightDeltas := initializeZeroWeightsAndBiases(n.sizes)
 		for _, trainingInput := range batch {
 			input := trainingInput.Input
 			expected := trainingInput.Expected
-			biasDeltas, weightDeltas := initializeZeroWeightsAndBiases(n.sizes)
 
 			// First we compute the Z values and the activations of every neuron of the network
-
 			// The activation values after computing the activation function of all the layers
 			var activations []vector.Vector
 			activations = append(activations, input)
@@ -120,20 +117,13 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int
 					weightDeltas[i][j] = vector.Add(weightDeltas[i][j], neuronDeltas)
 				}
 			}
-
-			for i := 0; i < n.layers; i++ {
-				nablaB[i] = vector.Add(nablaB[i], biasDeltas[i])
-				for j := 0; j < n.sizes[i+1]; j++ {
-					nablaW[i][j] = vector.Add(nablaW[i][j], weightDeltas[i][j])
-				}
-			}
 		}
 
 		for i := 0; i < n.layers; i++ {
-			n.biases[i] = vector.Substract(n.biases[i], vector.Scale(nablaB[i], sdgRatio))
+			n.biases[i] = vector.Substract(n.biases[i], vector.Scale(biasDeltas[i], sdgRatio))
 
 			for j := 0; j < n.sizes[i+1]; j++ {
-				n.weights[i][j] = vector.Substract(n.weights[i][j], vector.Scale(nablaW[i][j], sdgRatio))
+				n.weights[i][j] = vector.Substract(n.weights[i][j], vector.Scale(weightDeltas[i][j], sdgRatio))
 			}
 		}
 	}

@@ -18,7 +18,7 @@ func main() {
 		panic(err)
 	}
 
-	net := network.NewRandom([]int{784, 30, 10})
+	net := network.NewRandom([]int{784, 30, 30, 10})
 
 	/*
 		trainingData := data[:1000]
