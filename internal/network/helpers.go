@@ -6,17 +6,6 @@ import (
 	"math/rand"
 )
 
-// s(x) = 1 / (1 + e^(-x))
-func sigmoid(x float64) float64 {
-	return 1.0 / (1.0 + math.Exp(-x))
-}
-
-// the derivative of the sigmoid function: s'(x) = s(x) * (1 - s(x))
-func sigmoidPrime(x float64) float64 {
-	s := sigmoid(x)
-	return s * (1 - s)
-}
-
 type Input struct {
 	Input    vector.Vector
 	Expected vector.Vector

@@ -21,8 +21,8 @@ func main() {
 	net := network.NewRandom([]int{784, 30, 10})
 
 	// Train the net
-	epochs := 30
-	trainingData := data[0:50000]
+	epochs := 400
+	trainingData := data[0:1000]
 	testData := data[50001:]
 
 	fmt.Printf("Training... \n")
@@ -31,7 +31,7 @@ func main() {
 		// the stochastic gradient descent. For every batch we process we are going to propagate backwards
 		// the delta in the gradient and adjust every weight and bias.
 
-		net.StochasticGradientDescent(trainingData, 10, 2.999)
+		net.StochasticGradientDescent(trainingData, 10, 0.5)
 		correct := 0
 		for _, i := range testData {
 			res, _ := net.FeedForward(i.Input)

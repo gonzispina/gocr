@@ -88,8 +88,11 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int
 			// Now we calculate the cost derivative with respect to every weight and bias in the network and
 			// subtract that from every weight and bias of the network.
 			cost := vector.Substract(activations[n.layers], expected)
-			sp := vector.Apply(zs[lli], sigmoidPrime)
-			deltas := vector.Hadamard(cost, sp)
+			deltas := cost
+			/*
+				sp := vector.Apply(zs[lli], sigmoidPrime)
+				deltas := vector.Hadamard(cost, sp)
+			*/
 
 			biasDeltas[lli] = vector.Add(biasDeltas[lli], deltas)
 			for j := 0; j < n.sizes[n.layers]; j++ {
@@ -100,7 +103,7 @@ func (n *Network) StochasticGradientDescent(trainingData []*Input, batchSize int
 			// From the last hidden layer the first hidden one, 'cause the first one is the input one
 			for i := lli - 1; i >= 0; i-- {
 				z := zs[i]
-				sp = vector.Apply(z, sigmoidPrime)
+				sp := vector.Apply(z, sigmoidPrime)
 
 				// We transpose the next layer weights and calculate the new deltas
 				newDeltas := make(vector.Vector, n.sizes[i+1])
